@@ -23,6 +23,24 @@ const Spotify = {
       window.location = accessUrl;
     }
   },
+  async search(term) {
+    const token = Spotify.getAccessToken();
+    const headers = {Authorization: `Bearer${token}`};
+
+    const response = await fetch(`https://api.spotify.com/v1/search?type=track&q=${encodeURIComponent(term)}`, ${headers});
+    const jsonResponse = await response.json();
+
+    if(!jsonResponse.tracks) return [];
+
+    return jsonResponse.tracks.items.map(track => ({
+      id: track.id, 
+      name: track.name,
+      artist: track.artist, 
+      album: track.album,
+      uri: track.uri,
+    }))
+  },
+  
   async savePlaylist(playlistName, trackUris) {
     if (!playlistName || !trackUris) return;
     const token = Spotify.getAccessToken();
