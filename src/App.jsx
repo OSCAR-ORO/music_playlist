@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import Tracklist from "./components/tracklist/Tracklist";
 import Playlist from "./components/playlist/Playlist";
+import SearchBar from "./components/search_bar/SearchBar";
 import Spotify from "./spotify";
-import SearchBar  from "./components/search_bar/SearchBar";
 
 export default function App() {
   const [searchResults, setSearchResults] = useState([]);
@@ -13,6 +13,7 @@ export default function App() {
     if (playlistTracks.find((t) => t.id === track.id)) return;
     setPlaylistTracks([...playlistTracks, track]);
   };
+
   const removeTrack = (track) => {
     setPlaylistTracks(playlistTracks.filter((t) => t.id !== track.id));
   };
@@ -20,20 +21,25 @@ export default function App() {
   const savePlaylist = () => {
     const trackUris = playlistTracks.map((track) => track.uri);
     Spotify.savePlaylist(playlistName, trackUris).then(() => {
-      setPlaylistName("New playlist");
+      setPlaylistName("New Playlist");
       setPlaylistTracks([]);
     });
   };
-const search = (term) => {
-  Spotify.search(term).then((result)=>setSearchResults(result))
-}
-  
+
+  // 🔑 New: search handler
+  const search = (term) => {
+    Spotify.search(term).then((results) => setSearchResults(results));
+  };
 
   return (
     <div>
       <h1>Jamming Music</h1>
-      <SearchBar onSearch={search}/>
+      <SearchBar onSearch={search} />
+
+      {/* Search results */}
       <Tracklist tracks={searchResults} onAdd={addTrack} />
+
+      {/* Playlist */}
       <Playlist
         playlistTracks={playlistTracks}
         playlistName={playlistName}
