@@ -1,3 +1,13 @@
+# Run the app
+1 Download ngrok CLI & Install
+2 Authenticate ngrok from your dashboard ->ngrok config add-authtoken YOUR_AUTHTOKEN_HERE
+3  Run vite server -> npm run dev
+4 Run gnrok tunnel on vite port -> eg. ngrok http 5173
+5 Copy HTTPS URL -> Forwarding https://...
+6 Add it to Spotify dev dashboard as redirect URI
+7 Update in spotify.js the const redirectUri = https://...
+
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

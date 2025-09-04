@@ -100,8 +100,8 @@ const Spotify = {
   async startAuth() {
     const scope = "playlist-modify-public";
 
-    const codeVerifier = generateCodeVerifier(128);
-    const codeChallenge = await generateCodeChallenge(codeVerifier);
+    const codeVerifier = generateCodeVerifier(128); //Empty_arr -> fill_num -> PKCE_char -> join_str -> verifier
+    const codeChallenge = await generateCodeChallenge(codeVerifier); //verifier -> Uint8Array -> SHA256_hash -> URL_safe_base64
 
     // store verifier for later exchange
     window.localStorage.setItem("spotify_code_verifier", codeVerifier);
