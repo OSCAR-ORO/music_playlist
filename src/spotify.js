@@ -1,23 +1,45 @@
 const clientId = "0e60230dce2742ee979fc193d6cac943";
-const redirectUri = "https://0fcc073d792d.ngrok-free.app/";  
+const redirectUri = "https://d6ad019bc482.ngrok-free.app/";
 let accessToken;
 let expiresIn;
+let userId;
+
+async function getCurrentUserId() {
+  if (userId) return Promise.resolve(userId);
+
+  const token = await Spotify.getAccessToken();
+  if (!token) return;
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+
+  // get user id
+  const response = await fetch("https://api.spotify.com/v1/me", { headers });
+  const jsonResponse = await response.json();
+  return (userId = jsonResponse.id);
+}
 
 // --- PKCE helpers ---
 function base64UrlEncode(arrayBuffer) {
   // Convert the ArrayBuffer to string of bytes
   const bytes = new Uint8Array(arrayBuffer);
   let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.byteLength; i++)
+    binary += String.fromCharCode(bytes[i]);
   // Base64 encode and make URL-safe
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 function generateCodeVerifier(length = 128) {
   const array = new Uint8Array(length);
   window.crypto.getRandomValues(array);
   // map to characters [A-Z,a-z,0-9,-._~] per RFC7636 suggestion
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
   let str = "";
   for (let i = 0; i < array.length; i++) {
     str += chars[array[i] % chars.length];
@@ -42,12 +64,15 @@ const Spotify = {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get("code");
 
-    
     if (code) {
-      const storedVerifier = window.localStorage.getItem("spotify_code_verifier");
+      const storedVerifier = window.localStorage.getItem(
+        "spotify_code_verifier"
+      );
       if (!storedVerifier) {
         // Can't exchange without verifier; start auth again
-        console.error("Missing code_verifier in localStorage. Restarting auth.");
+        console.error(
+          "Missing code_verifier in localStorage. Restarting auth."
+        );
         this.startAuth();
         return null;
       }
@@ -61,13 +86,16 @@ const Spotify = {
         code_verifier: storedVerifier,
       });
 
-      const tokenResponse = await fetch("https://accounts.spotify.com/api/token", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: body.toString(),
-      });
+      const tokenResponse = await fetch(
+        "https://accounts.spotify.com/api/token",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: body.toString(),
+        }
+      );
 
       if (!tokenResponse.ok) {
         console.error("Token exchange failed", await tokenResponse.text());
@@ -80,7 +108,10 @@ const Spotify = {
 
       // Optionally store refresh_token if returned
       if (tokenJson.refresh_token) {
-        window.localStorage.setItem("spotify_refresh_token", tokenJson.refresh_token);
+        window.localStorage.setItem(
+          "spotify_refresh_token",
+          tokenJson.refresh_token
+        );
       }
 
       // Clear token when it expires
@@ -126,7 +157,9 @@ const Spotify = {
     const headers = { Authorization: `Bearer ${token}` };
 
     const response = await fetch(
-      `https://api.spotify.com/v1/search?type=track&q=${encodeURIComponent(term)}`,
+      `https://api.spotify.com/v1/search?type=track&q=${encodeURIComponent(
+        term
+      )}`,
       { headers }
     );
     const jsonResponse = await response.json();
@@ -142,8 +175,51 @@ const Spotify = {
     }));
   },
 
-  async savePlaylist(playlistName, trackUris) {
-    if (!playlistName || !trackUris || trackUris.length === 0) return;
+  async getUserPlaylists() {
+    const token = await Spotify.getAccessToken();
+    if (!token) return [];
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const userId = await getCurrentUserId();
+    if (!userId) return []; 
+
+    const response = await fetch(
+      `https://api.spotify.com/v1/users/${userId}/playlists`,
+      { headers }
+    );
+
+    if (!response.ok) {
+      console.error("Failed to fetch playlists", await response.text());
+      return [];
+    }
+
+    const jsonResponse = await response.json();
+    return jsonResponse.items || [];
+  },
+  async getPlaylist(id) {
+    const token = await Spotify.getAccessToken();
+    if (!token) return [];
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    const response = await fetch(`https://api.spotify.com/v1/playlists/${id}/tracks`, { headers });
+
+    if (!response.ok) {
+      console.error("Failed to fetch tracks", await response.text());
+      return [];
+    }
+
+    const jsonResponse = await response.json();
+    return jsonResponse.items || [];
+  },
+ 
+  async savePlaylist(playlistName, trackUris, playlistId) {
+    if (!playlistName || !Array.isArray(trackUris)) return;
 
     const token = await Spotify.getAccessToken();
     if (!token) return;
@@ -152,29 +228,62 @@ const Spotify = {
       "Content-Type": "application/json",
     };
 
-    // 1: get user id
-    const response = await fetch("https://api.spotify.com/v1/me", { headers });
-    const jsonResponse = await response.json();
-    const userId = jsonResponse.id;
-
-    // 2: create playlist
-    const createResponse = await fetch(
-      `https://api.spotify.com/v1/users/${userId}/playlists`,
+    // ensure userId is set
+    const userId = await getCurrentUserId();
+    if (!userId) {
+      console.error("Failed to get user ID");
+      return;
+    }
+    // update existing playlist
+    if (playlistId) {
+      const updateResponse = await fetch(
+        `https://api.spotify.com/v1/playlists/${playlistId}`,
+        {
+          method: 'PUT',
+          headers: headers,
+          body: JSON.stringify({ name: playlistName })
+        }
+      );
+      if(!updateResponse.ok) {
+        console.error('Failed to update playlist', await updateResponse.text());
+        return updateResponse;
+      
+    }
+    const replaceResponse = await fetch(
+      `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
       {
-        method: "POST",
+        method: "PUT",
         headers: headers,
-        body: JSON.stringify({ name: playlistName }),
+        body: JSON.stringify({ uris: trackUris }),
       }
-    );
-    const playlistResponse = await createResponse.json();
-    const playlistId = playlistResponse.id;
+    ); 
+    if(!replaceResponse.ok) {
+      console.error('Failed to replace tracks', await replaceResponse.text());
+    }
+    return replaceResponse;
+    } else {
+      // create new playlist
+      const createResponse = await fetch(
+        `https://api.spotify.com/v1/users/${userId}/playlists`,
+        {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify({ name: playlistName }),
+        }
+      );
+      const playlistResponse = await createResponse.json();
+      const playlistId = playlistResponse.id;
 
-    // 3: add tracks to playlist
-    return fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-      method: "POST",
-      headers: headers,
-      body: JSON.stringify({ uris: trackUris }),
-    });
+      // 3: add tracks to playlist
+      return fetch(
+        `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+        {
+          method: "POST",
+          headers: headers,
+          body: JSON.stringify({ uris: trackUris }),
+        }
+      );
+    }
   },
 };
 
